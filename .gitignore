@@ -49,3 +49,9 @@ osm/
 # Токен Mapillary и выгруженные кадры
 .mapillary-token
 mapillary/
+
+# Unity: сцена, материалы и текстуры собираются импортёром из data.json
+/Kotiki/Assets/Kotiki/Scenes/
+/Kotiki/Assets/Kotiki/Materials/
+/Kotiki/Assets/Kotiki/Textures/
+/Kotiki/Assets/Kotiki/Settings/

@@ -11,7 +11,8 @@
 data/data.json        собранная карта (1908 домов, 1383 линии, 23 водоёма, 18 котиков)
 data/preview.png      превью карты, нарисованное по data.json
 tools/                сборка карты: OSM -> data.json (+ превью)
-unity-src/Assets/…    скрипты Unity: импортёр и вспомогательный код
+Kotiki/               проект Unity 6000.6.7f1 (URP); скрипты — Kotiki/Assets/Kotiki/Scripts
+previews/             снимки сцены, которые рисует пункт меню «2. Сделать снимки»
 osm_raw/              исходный PBF (в git не хранится, качается скриптом)
 ```
 
@@ -40,30 +41,39 @@ python3 tools/build_data.py osm data/data.json
 
 ## Unity
 
-1. Поставить Unity Hub и редактор **Unity 6 LTS (6000.x)** с модулями iOS и Android.
-2. Новый проект: шаблон **Universal 3D (URP)**, имя `Kotiki`, путь — эта папка
-   (`~/Desktop/kotiki-zelenogradsk`). Получится `~/Desktop/kotiki-zelenogradsk/Kotiki`.
-3. Скопировать содержимое `unity-src/Assets` в `Kotiki/Assets` (папку `Kotiki` целиком).
-4. В редакторе: меню **Котики → 1. Импортировать карту (data.json)**.
+Проект уже создан: `Kotiki/` (Unity 6000.6.7f1, шаблон Universal 3D).
+
+1. Unity Hub → вкладка **Projects** → **Add project from disk** → выбрать
+   `~/Desktop/kotiki-zelenogradsk/Kotiki`. Новый проект с именем `kotiki`
+   создавать не надо — macOS не различает регистр, и Hub скажет, что такой уже есть.
+2. В редакторе: меню **Котики → 1. Импортировать карту (data.json)**.
+3. Меню **Котики → 2. Сделать снимки сцены** — кладёт 6 PNG в `previews/`.
 
 Импортёр создаёт сцену `Assets/Kotiki/Scenes/Zelenogradsk.unity`: земля, море и
 пруды, пляж, дороги, дома с вальмовыми крышами, деревья в лесах и парках,
 солнце с мягкими тенями, туман, ACES-тонмаппинг, камера у нашего дома.
 
-Проверка шага 1: дом на Тургенева жёлтый, рядом красный маячок, в консоли
-`[Котики] наш дом найден: высота …`.
+Проверка шага 1: дом на Тургенева жёлтый (31 м, две длинные секции), на его
+крыше красный маячок, в консоли `[Котики] наш дом найден: высота 31.2 м`.
 
-Без редактора (headless, после активации лицензии):
+Сцена и материалы — генерируемые, в git их нет: после клонирования достаточно
+пункта 2 (это ~1 минута). Без редактора (headless, после активации лицензии):
 
 ```bash
-"/Applications/Unity/Hub/Editor/6000.x.x/Unity.app/Contents/MacOS/Unity" \
-  -batchmode -quit -projectPath ~/Desktop/kotiki-zelenogradsk/Kotiki \
-  -executeMethod Kotiki.EditorTools.MapImporter.ImportHeadless -logFile -
+UNITY="/Applications/Unity/Hub/Editor/6000.6.7f1/Unity.app/Contents/MacOS/Unity"
+
+$UNITY -batchmode -quit -projectPath ~/Desktop/kotiki-zelenogradsk/Kotiki \
+  -executeMethod Kotiki.EditorTools.MapImporter.ImportHeadless -logFile /tmp/import.log
+
+$UNITY -batchmode -quit -projectPath ~/Desktop/kotiki-zelenogradsk/Kotiki \
+  -executeMethod Kotiki.EditorTools.ScenePreview.RenderHeadless -logFile /tmp/render.log
 ```
 
 ## Соглашения
 
-- Координаты: `world = (x_data, y, −z_data)`, 1 единица = 1 метр, север = +Z.
+- Координаты: 1 единица = 1 метр, север = +Z. В `data.json` север записан как
+  −z (так выходит из широты), поэтому `MapData.Load` один раз переворачивает
+  ось z, и дальше весь код, включая меши, живёт в `world = (x, y, z)`.
 - Слои-плоскости лежат друг над другом с шагом 1–2 см, чтобы не мерцали:
   земля 0, зелень 0.004, пляж 0.02, вода 0.03, дороги 0.06, пирс 0.12.
 - Меши нарезаны по чанкам 200 × 200 м — это же пригодится для LOD и отсечения.
