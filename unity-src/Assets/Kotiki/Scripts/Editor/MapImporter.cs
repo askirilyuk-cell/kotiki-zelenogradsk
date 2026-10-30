@@ -188,9 +188,26 @@ namespace Kotiki.EditorTools
                 if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", c.smoothness);
                 if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", c.metallic);
 
+                var facadeKind = FacadeKind(name);
+                if (facadeKind != null)
+                {
+                    var tex = FacadeTextures.Get(facadeKind);
+                    if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
+                    else if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
+                }
+
                 Directory.CreateDirectory(MaterialsDir);
                 AssetDatabase.CreateAsset(mat, path);
                 return mat;
+            }
+
+            static string FacadeKind(string name)
+            {
+                if (name == "Дом" || name.StartsWith("Стена частная")) return "частная";
+                if (name.StartsWith("Стена панельная")) return "панельная";
+                if (name.StartsWith("Стена общественная")) return "общественная";
+                if (name.StartsWith("Стена храм")) return "храм";
+                return null;
             }
 
             static (Color color, float smoothness, float metallic) Spec(string name)
@@ -209,12 +226,18 @@ namespace Kotiki.EditorTools
                     case "Пешеходная": return (Hex("#a8a294"), 0.25f, 0f);
                     case "ЖД": return (Hex("#6b6b6b"), 0.3f, 0.4f);
                     case "Дом": return (Hex("#f2c94c"), 0.2f, 0f);
-                    case "Стена частная": return (Hex("#dcc8ae"), 0.12f, 0f);
-                    case "Стена панельная": return (Hex("#a8b0ba"), 0.15f, 0f);
+                    case "Стена частная 1": return (Hex("#e6cfae"), 0.12f, 0f);
+                    case "Стена частная 2": return (Hex("#efe2c2"), 0.12f, 0f);
+                    case "Стена частная 3": return (Hex("#c9d3bd"), 0.12f, 0f);
+                    case "Стена панельная 1": return (Hex("#cfd4d8"), 0.15f, 0f);
+                    case "Стена панельная 2": return (Hex("#e2d8c6"), 0.15f, 0f);
                     case "Стена сарай": return (Hex("#8f8677"), 0.1f, 0f);
-                    case "Стена общественная": return (Hex("#e0d3b4"), 0.15f, 0f);
-                    case "Стена храм": return (Hex("#cf9f8b"), 0.15f, 0f);
-                    case "Крыша": return (Hex("#a5502f"), 0.18f, 0f);
+                    case "Стена общественная": return (Hex("#e8e0cc"), 0.15f, 0f);
+                    case "Стена храм": return (Hex("#e8d0c0"), 0.15f, 0f);
+                    case "Цоколь": return (Hex("#7d7468"), 0.1f, 0f);
+                    case "Крыша 1": return (Hex("#a5502f"), 0.18f, 0f);
+                    case "Крыша 2": return (Hex("#8c4a3a"), 0.18f, 0f);
+                    case "Крыша 3": return (Hex("#6e6a5f"), 0.18f, 0f);
                     case "Крыша плоская": return (Hex("#6e6e70"), 0.2f, 0f);
                     case "Ствол": return (Hex("#6b4a2f"), 0.05f, 0f);
                     case "Хвоя": return (Hex("#2f5c37"), 0.05f, 0f);
@@ -301,22 +324,29 @@ namespace Kotiki.EditorTools
             foreach (var b in data.Buildings)
             {
                 if (b.Footprint.Length < 3) continue;
+                var anchor = b.Footprint[0];
+                int hash = Hash(anchor);
+
                 string wallLayer;
                 if (b.IsHome) wallLayer = "Дом";
                 else
                     switch (b.Kind)
                     {
-                        case 1: wallLayer = "Стена панельная"; break;
+                        case 1: wallLayer = hash % 2 == 0 ? "Стена панельная 1" : "Стена панельная 2"; break;
                         case 2: wallLayer = "Стена сарай"; break;
                         case 3: wallLayer = "Стена общественная"; break;
                         case 4: wallLayer = "Стена храм"; break;
-                        default: wallLayer = "Стена частная"; break;
+                        default: wallLayer = "Стена частная " + (1 + hash % 3); break;
                     }
 
-                string roofLayer = b.HipRoof ? "Крыша" : "Крыша плоская";
-                Props.AddBuilding(layers.Get(wallLayer, b.Footprint[0]), layers.Get(roofLayer, b.Footprint[0]), b);
+                string roofLayer = b.HipRoof ? "Крыша " + (1 + hash % 3) : "Крыша плоская";
+
+                Props.AddBuilding(layers.Get(wallLayer, anchor), layers.Get(roofLayer, anchor),
+                                  layers.Get("Цоколь", anchor), b);
             }
         }
+
+        static int Hash(Vector2 p) => Mathf.Abs((int)(p.x * 7.31f + p.y * 13.17f));
 
         static void BuildTrees(GameObject root, MapData data, Layers layers)
         {

@@ -3,56 +3,105 @@ using UnityEngine;
 
 namespace Kotiki.EditorTools
 {
-    /// <summary>Простые процедурные модели: дом-коробка с крышей, деревья.</summary>
+    /// <summary>Процедурные дома и деревья.</summary>
     public static class Props
     {
-        public static void AddBuilding(MeshBuilder walls, MeshBuilder roof, Building b)
+        /// <summary>Стены, крыша и цоколь одного дома.</summary>
+        public static void AddBuilding(MeshBuilder walls, MeshBuilder roof, MeshBuilder plinth, Building b)
         {
             var fp = GeoMath.CCW(b.Footprint);
             if (fp.Count < 3) return;
 
             float h = Mathf.Max(2.5f, b.Height);
+            int floors = Mathf.Clamp(Mathf.RoundToInt(h / 3.0f), 1, 12);
+
             for (int i = 0; i < fp.Count; i++)
             {
                 Vector2 p = fp[i], q = fp[(i + 1) % fp.Count];
                 Vector2 edge = q - p;
                 if (edge.sqrMagnitude < 1e-4f) continue;
+
                 var outward = new Vector3(edge.y, 0f, -edge.x).normalized;
-                walls.AddWall(new Vector3(p.x, 0f, p.y), new Vector3(q.x, 0f, q.y), h, outward);
+                int bays = Mathf.Clamp(Mathf.RoundToInt(edge.magnitude / 3.4f), 1, 14);
+
+                walls.AddWall(new Vector3(p.x, 0f, p.y), new Vector3(q.x, 0f, q.y), h, outward, bays, floors);
+
+                // цоколь: та же стена, вынесенная наружу на 5 см
+                Vector2 o = new Vector2(outward.x, outward.z) * 0.05f;
+                plinth.AddWall(new Vector3(p.x + o.x, 0f, p.y + o.y),
+                               new Vector3(q.x + o.x, 0f, q.y + o.y), 0.75f, outward, 1, 1);
             }
 
-            if (b.HipRoof) AddHipRoof(roof, fp, h);
+            if (b.HipRoof) AddHipRoof(roof, fp, h, b.Kind == 0);
             else roof.AddFlatPolygon(fp, h + 0.05f);
         }
 
-        static void AddHipRoof(MeshBuilder mb, List<Vector2> fp, float h)
+        /// <summary>
+        /// Вальмовая крыша: конёк вдоль длинной оси, торцы сведены к двум точкам.
+        /// Для почти квадратных контуров вырождается в пирамиду — это и нужно.
+        /// </summary>
+        static void AddHipRoof(MeshBuilder mb, List<Vector2> fp, float h, bool chimney)
         {
-            Vector2 c = GeoMath.Centroid(fp);
-            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+            Vector2 p0 = fp[0], p1 = fp[1];
+            float best = -1f;
+            for (int i = 0; i < fp.Count; i++)
+            {
+                Vector2 a = fp[i], c = fp[(i + 1) % fp.Count];
+                float len = (c - a).sqrMagnitude;
+                if (len > best) { best = len; p0 = a; p1 = c; }
+            }
+
+            Vector2 dir = (p1 - p0).normalized;
+            if (dir.sqrMagnitude < 1e-4f) return;
+            var perp = new Vector2(-dir.y, dir.x);
+
+            float minT = float.MaxValue, maxT = float.MinValue;
+            float minS = float.MaxValue, maxS = float.MinValue;
             foreach (var p in fp)
             {
-                minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x);
-                minZ = Mathf.Min(minZ, p.y); maxZ = Mathf.Max(maxZ, p.y);
+                Vector2 rel = p - p0;
+                float t = Vector2.Dot(rel, dir), s = Vector2.Dot(rel, perp);
+                minT = Mathf.Min(minT, t); maxT = Mathf.Max(maxT, t);
+                minS = Mathf.Min(minS, s); maxS = Mathf.Max(maxS, s);
             }
-            float minSide = Mathf.Min(maxX - minX, maxZ - minZ);
-            float rh = Mathf.Clamp(minSide * 0.28f + 0.8f, 1.4f, 4.5f);
-            const float inset = 0.34f;
 
-            var top = new List<Vector2>(fp.Count);
-            foreach (var p in fp) top.Add(Vector2.Lerp(p, c, inset));
+            float depth = Mathf.Max(0.5f, maxS - minS);
+            float rh = Mathf.Clamp(depth * 0.35f, 1.2f, 4.5f);
+            float sMid = (minS + maxS) * 0.5f;
+            float ridgeStart = minT + depth * 0.5f;
+            float ridgeEnd = Mathf.Max(ridgeStart, maxT - depth * 0.5f);
+
+            Vector2 Top(Vector2 p)
+            {
+                Vector2 rel = p - p0;
+                float t = Mathf.Clamp(Vector2.Dot(rel, dir), ridgeStart, ridgeEnd);
+                return p0 + dir * t + perp * sMid;
+            }
 
             for (int i = 0; i < fp.Count; i++)
             {
-                int j = (i + 1) % fp.Count;
-                Vector3 a = new Vector3(fp[i].x, h, fp[i].y);
-                Vector3 b = new Vector3(fp[j].x, h, fp[j].y);
-                Vector3 cc = new Vector3(top[j].x, h + rh, top[j].y);
-                Vector3 d = new Vector3(top[i].x, h + rh, top[i].y);
-                Vector3 want = new Vector3((fp[i].x + fp[j].x) * 0.5f - c.x, 0f, (fp[i].y + fp[j].y) * 0.5f - c.y);
-                if (want.sqrMagnitude < 1e-4f) want = Vector3.up;
-                mb.AddQuad(a, b, cc, d, want.normalized);
+                Vector2 a = fp[i], b2 = fp[(i + 1) % fp.Count];
+                Vector2 ta = Top(a), tb = Top(b2);
+
+                Vector3 A = new Vector3(a.x, h, a.y);
+                Vector3 B = new Vector3(b2.x, h, b2.y);
+                Vector3 C = new Vector3(tb.x, h + rh, tb.y);
+                Vector3 D = new Vector3(ta.x, h + rh, ta.y);
+
+                Vector2 edge = b2 - a;
+                if (edge.sqrMagnitude < 1e-4f) continue;
+                var want = new Vector3(edge.y, 0f, -edge.x).normalized;
+
+                if ((ta - tb).sqrMagnitude < 0.01f) mb.AddTwoSided(A, B, C, want);
+                else mb.AddQuad(A, B, C, D, want);
             }
-            mb.AddFlatPolygon(top, h + rh + 0.02f);
+
+            if (chimney && rh > 1.4f)
+            {
+                Vector2 ridge = p0 + dir * ((ridgeStart + ridgeEnd) * 0.5f) + perp * (sMid + depth * 0.16f);
+                mb.AddBox(new Vector3(ridge.x, h + rh * 0.45f, ridge.y),
+                          new Vector3(0.75f, 1.8f, 0.75f), Vector3.up);
+            }
         }
 
         public static void AddTree(MeshBuilder trunk, MeshBuilder leaves, Vector2 pos, float scale, bool pine)

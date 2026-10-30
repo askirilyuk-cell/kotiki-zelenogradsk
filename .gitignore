@@ -45,3 +45,7 @@ osm/
 
 # macOS
 .DS_Store
+
+# Токен Mapillary и выгруженные кадры
+.mapillary-token
+mapillary/

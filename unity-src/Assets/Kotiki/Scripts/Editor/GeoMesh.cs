@@ -14,15 +14,22 @@ namespace Kotiki.EditorTools
 
         public void AddTwoSided(Vector3 a, Vector3 b, Vector3 c, Vector3 wantNormal)
         {
+            AddTwoSided(a, b, c, wantNormal, new Vector2(a.x, a.z) * 0.02f,
+                        new Vector2(b.x, b.z) * 0.02f, new Vector2(c.x, c.z) * 0.02f);
+        }
+
+        public void AddTwoSided(Vector3 a, Vector3 b, Vector3 c, Vector3 wantNormal,
+                                Vector2 ua, Vector2 ub, Vector2 uc)
+        {
             Vector3 n = Vector3.Cross(b - a, c - a);
             if (Vector3.Dot(n, wantNormal) < 0f)
             {
                 Vector3 tmp = b; b = c; c = tmp;
+                Vector2 tmpUv = ub; ub = uc; uc = tmpUv;
             }
             int i = Verts.Count;
             Verts.Add(a); Verts.Add(b); Verts.Add(c);
-            Vector2 ua = new Vector2(a.x, a.z) * 0.02f;
-            UVs.Add(ua); UVs.Add(new Vector2(b.x, b.z) * 0.02f); UVs.Add(new Vector2(c.x, c.z) * 0.02f);
+            UVs.Add(ua); UVs.Add(ub); UVs.Add(uc);
             Tris.Add(i); Tris.Add(i + 1); Tris.Add(i + 2);
         }
 
@@ -30,6 +37,13 @@ namespace Kotiki.EditorTools
         {
             AddTwoSided(a, b, c, wantNormal);
             AddTwoSided(a, c, d, wantNormal);
+        }
+
+        public void AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 wantNormal,
+                            Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud)
+        {
+            AddTwoSided(a, b, c, wantNormal, ua, ub, uc);
+            AddTwoSided(a, c, d, wantNormal, ua, uc, ud);
         }
 
         /// <summary>Горизонтальный полигон (нормаль вверх).</summary>
@@ -45,11 +59,36 @@ namespace Kotiki.EditorTools
             }
         }
 
-        public void AddWall(Vector3 bottomA, Vector3 bottomB, float height, Vector3 outward)
+        /// <summary>
+        /// Стена дома. UV идут в «окнах»: по ширине — число оконных осей (bays),
+        /// по высоте — число этажей (floors). Текстура фасада рассчитана на одну плитку.
+        /// </summary>
+        public void AddWall(Vector3 bottomA, Vector3 bottomB, float height, Vector3 outward, int bays, int floors)
         {
             Vector3 topA = bottomA + Vector3.up * height;
             Vector3 topB = bottomB + Vector3.up * height;
-            AddQuad(bottomA, bottomB, topB, topA, outward);
+            AddQuad(bottomA, bottomB, topB, topA, outward,
+                new Vector2(0f, 0f), new Vector2(bays, 0f), new Vector2(bays, floors), new Vector2(0f, floors));
+        }
+
+        public void AddBox(Vector3 center, Vector3 size, Vector3 desiredTopNormal)
+        {
+            Vector3 h = size * 0.5f;
+            Vector3 p000 = center + new Vector3(-h.x, -h.y, -h.z);
+            Vector3 p100 = center + new Vector3(h.x, -h.y, -h.z);
+            Vector3 p110 = center + new Vector3(h.x, -h.y, h.z);
+            Vector3 p010 = center + new Vector3(-h.x, -h.y, h.z);
+            Vector3 p001 = center + new Vector3(-h.x, h.y, -h.z);
+            Vector3 p101 = center + new Vector3(h.x, h.y, -h.z);
+            Vector3 p111 = center + new Vector3(h.x, h.y, h.z);
+            Vector3 p011 = center + new Vector3(-h.x, h.y, h.z);
+
+            AddQuad(p000, p100, p110, p010, -Vector3.up);
+            AddQuad(p001, p011, p111, p101, desiredTopNormal);
+            AddQuad(p000, p001, p101, p100, Vector3.forward);
+            AddQuad(p110, p111, p011, p010, Vector3.back);
+            AddQuad(p100, p101, p111, p110, Vector3.right);
+            AddQuad(p010, p011, p001, p000, Vector3.left);
         }
 
         /// <summary>Лента постоянной ширины по ломаной (дороги, реки, ж/д).</summary>
